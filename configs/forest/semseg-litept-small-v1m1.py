@@ -12,9 +12,8 @@ grid_size = 0.02            # 训练体素大小 (m)
 # --- 类别映射 ---
 class_mapping = {7: -1}     # 忽略 class 7 噪声点
 
-# --- 预训练权重 ---
-# 例: weight="exp/forest/.../model_best.pth"
-weight = None
+# --- 预训练权重（在 local/server 配置中指定路径）---
+# weight = None
 resume = False              # True: 从 model_last.pth 恢复训练
 
 # ===================== 训练配置 =====================

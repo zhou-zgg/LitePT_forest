@@ -1,2 +1,21 @@
 data
 exp
+
+# 编译产物
+__pycache__/
+build/
+*.egg-info/
+
+# 权重文件
+pretrained/
+
+# 临时文件
+tree
+nohup.out
+test_hainan.json
+tensorboard_patch/
+
+tea_debug.log
+CREATE
+RUN
+datasets/dataset/

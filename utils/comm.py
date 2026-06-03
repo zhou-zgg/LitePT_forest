@@ -159,6 +159,15 @@ def shared_random_seed():
     return all_ints[0]
 
 
+def all_reduce(tensor, average=True):
+    if get_world_size() < 2:
+        return tensor
+    dist.all_reduce(tensor)
+    if average:
+        tensor /= get_world_size()
+    return tensor
+
+
 def reduce_dict(input_dict, average=True):
     """
     Reduce the values in the dictionary from all processes so that process with rank

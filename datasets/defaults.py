@@ -155,8 +155,13 @@ class DefaultDataset(Dataset):
         return data_dict
 
     def prepare_test_data(self, idx):
-        # load data
         data_dict = self.get_data(idx)
+        if data_dict.get("fast_skip"):
+            return dict(
+                name=data_dict["name"],
+                segment=data_dict["segment"],
+                fast_skip=True,
+            )
         data_dict = self.transform(data_dict)
         result_dict = dict(segment=data_dict.pop("segment"), name=data_dict.pop("name"))
         if "origin_segment" in data_dict:
@@ -172,6 +177,8 @@ class DefaultDataset(Dataset):
         for data in data_dict_list:
             if self.test_voxelize is not None:
                 data_part_list = self.test_voxelize(data)
+                if isinstance(data_part_list, dict):
+                    data_part_list = [data_part_list]
             else:
                 data["index"] = np.arange(data["coord"].shape[0])
                 data_part_list = [data]

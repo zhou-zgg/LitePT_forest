@@ -856,6 +856,7 @@ class GridSample(object):
                 mask[data_dict["sampled_index"]] = True
                 data_dict["sampled_index"] = np.where(mask[idx_unique])[0]
             data_dict = index_operator(data_dict, idx_unique)
+            data_dict["index"] = idx_unique
             if self.return_inverse:
                 data_dict["inverse"] = np.zeros_like(inverse)
                 data_dict["inverse"][idx_sort] = inverse

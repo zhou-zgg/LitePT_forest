@@ -10,5 +10,8 @@ from .structure3d import Structured3DDataset
 from .nuscenes import NuScenesDataset
 from .waymo import WaymoDataset
 
+# forestry
+from .forest import ForestDataset
+
 # dataloader
 from .dataloader import MultiDatasetDataloader

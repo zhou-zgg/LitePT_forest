@@ -979,9 +979,8 @@ class SphereCrop(object):
 
 @TRANSFORMS.register_module()
 class CylinderCrop(object):
-    def __init__(self, point_max=80000, radius=10, sample_rate=None, mode="random"):
+    def __init__(self, point_max=500000, sample_rate=None, mode="random"):
         self.point_max = point_max
-        self.radius = radius
         self.sample_rate = sample_rate
         assert mode in ["random", "center", "all"]
         self.mode = mode
@@ -1004,9 +1003,9 @@ class CylinderCrop(object):
             else:
                 raise NotImplementedError
 
-            idx_crop = np.argwhere(
-                np.sum(np.square(data_dict["coord"] - center), 1) < self.radius**2
-                )[:,0]
+            xy_dist_sq = np.sum(np.square(data_dict["coord"][:, :2] - center[:2]), axis=1)
+            idx_crop = np.argsort(xy_dist_sq)[:point_max]
+
             data_dict = index_operator(data_dict, idx_crop)
         return data_dict
 

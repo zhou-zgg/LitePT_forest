@@ -128,7 +128,6 @@ class Trainer(TrainerBase):
         self.logger.info("=> Loading config ...")
         self.cfg = cfg
         self.logger.info(f"Save path: {cfg.save_path}")
-        self.logger.info(f"Config:\n{cfg.pretty_text}")
         self.logger.info("=> Building model ...")
         self.model = self.build_model()
         self.logger.info("=> Building writer ...")

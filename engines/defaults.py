@@ -110,6 +110,23 @@ def default_config_parser(file_path, options):
     if options is not None:
         cfg.merge_from_dict(options)
 
+    # Apply top-level crop_param overrides to transform dicts
+    # (mmcv Config inheritance doesn't update variable references in nested dicts)
+    crop_keys = []
+    if hasattr(cfg, 'crop_type'):
+        crop_keys.append('type')
+    if hasattr(cfg, 'crop_point_max'):
+        crop_keys.append('point_max')
+    if crop_keys:
+        for split in ('train', 'val', 'test'):
+            if hasattr(cfg.data, split) and hasattr(getattr(cfg.data, split), 'transform'):
+                for t in getattr(cfg.data, split).transform:
+                    if t.type in ('CylinderCrop', 'SphereCrop'):
+                        if 'type' in crop_keys:
+                            t['type'] = cfg.crop_type
+                        if 'point_max' in crop_keys:
+                            t['point_max'] = cfg.crop_point_max
+
     if cfg.seed is None:
         cfg.seed = get_random_seed()
 

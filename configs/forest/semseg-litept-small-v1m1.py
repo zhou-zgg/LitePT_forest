@@ -1,5 +1,28 @@
 _base_ = ["../_base_/default_runtime.py"]
 
+# ===================== 常改配置 =====================
+# --- 裁切方式 ---
+# CylinderCrop: Z轴不切，适合森林竖直结构
+crop_type = "CylinderCrop"  # "CylinderCrop" or "SphereCrop"
+crop_point_max = 500000     # 采样点数上限, CylinderCrop: 500000, SphereCrop: 102400
+
+# --- 体素大小 ---
+grid_size = 0.02            # 训练体素大小 (m)
+
+# --- 类别映射 ---
+class_mapping = {7: -1}     # 忽略 class 7 噪声点
+
+# --- 预训练权重 ---
+# weight=exp/forest/.../model_best.pth
+weight = None               # 例: "pretrained/nuscenes-to-forest-v2.pth"
+resume = False              # True: 从 model_last.pth 恢复训练
+
+# ===================== 训练配置 =====================
+epoch = 600
+eval_epoch = 60
+save_path = "exp/forest/semseg-litept-small-v1m1"
+
+
 enable_wandb = False
 batch_size = 4
 num_worker = 20
@@ -8,8 +31,7 @@ empty_cache = False
 enable_amp = True
 clip_grad = 1.0
 
-save_path = "exp/forest/semseg-litept-small-v1m1"
-
+# ===================== 模型 =====================
 model = dict(
     type="DefaultSegmentorV2",
     num_classes=7,
@@ -49,8 +71,7 @@ model = dict(
     ],
 )
 
-epoch = 600
-eval_epoch = 60
+# ===================== 优化器 & 调度器 =====================
 optimizer = dict(type="AdamW", lr=0.006, weight_decay=0.05)
 scheduler = dict(
     type="OneCycleLR",
@@ -62,6 +83,7 @@ scheduler = dict(
 )
 param_dicts = [dict(keyword="block", lr=0.0006)]
 
+# ===================== 数据集 =====================
 dataset_type = "ForestDataset"
 data_root = "data/forest"
 
@@ -81,7 +103,7 @@ data = dict(
         type=dataset_type,
         split="train",
         data_root=data_root,
-        class_mapping={7: -1},
+        class_mapping=class_mapping,
         transform=[
             dict(type="CenterShift", apply_z=True),
             dict(
@@ -95,16 +117,16 @@ data = dict(
             dict(type="RandomJitter", sigma=0.005, clip=0.02),
             dict(
                 type="GridSample",
-                grid_size=0.02,
+                grid_size=grid_size,
                 hash_type="fnv",
                 mode="train",
                 return_grid_coord=True,
             ),
             dict(type="ElasticDistortion", distortion_params=[[0.2, 0.4], [0.8, 1.6]]),
-            dict(type="SphereCrop", point_max=102400, mode="random"),
+            dict(type=crop_type, point_max=crop_point_max, mode="random"),
             dict(type="CenterShift", apply_z=False),
             dict(type="ToTensor"),
-            dict(type="Update", keys_dict={"grid_size": 0.02}),
+            dict(type="Update", keys_dict={"grid_size": grid_size}),
             dict(
                 type="Collect",
                 keys=("coord", "grid_coord", "segment", "grid_size"),
@@ -122,7 +144,7 @@ data = dict(
             dict(type="Copy", keys_dict={"segment": "origin_segment"}),
             dict(
                 type="GridSample",
-                grid_size=0.02,
+                grid_size=grid_size,
                 hash_type="fnv",
                 mode="train",
                 return_grid_coord=True,

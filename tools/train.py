@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 from engines.defaults import (
     default_argument_parser,
     default_config_parser,

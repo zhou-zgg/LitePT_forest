@@ -127,6 +127,13 @@ def default_config_parser(file_path, options):
                         if 'point_max' in crop_keys:
                             t['point_max'] = cfg.crop_point_max
 
+    # Apply top-level data_root overrides to data splits
+    # (mmcv Config inheritance doesn't update variable references in nested dicts)
+    if hasattr(cfg, 'data_root'):
+        for split in ('train', 'val', 'test'):
+            if hasattr(cfg.data, split) and hasattr(getattr(cfg.data, split), 'data_root'):
+                getattr(cfg.data, split)['data_root'] = cfg.data_root
+
     if cfg.seed is None:
         cfg.seed = get_random_seed()
 

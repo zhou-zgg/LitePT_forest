@@ -13,8 +13,8 @@ grid_size = 0.02            # 训练体素大小 (m)
 class_mapping = {7: -1}     # 忽略 class 7 噪声点
 
 # --- 预训练权重 ---
-# weight=exp/forest/.../model_best.pth
-weight = None               # 例: "pretrained/nuscenes-to-forest-v2.pth"
+# 例: weight="exp/forest/.../model_best.pth"
+weight = None
 resume = False              # True: 从 model_last.pth 恢复训练
 
 # ===================== 训练配置 =====================

@@ -1,12 +1,12 @@
 _base_ = ["semseg-litept-small-v1m1.py"]
 
-# === 服务器配置 ===
+# === 服务器配置（vGPU-32GB, 128核, 1TB内存）===
 
-# --- 资源相关（与本地差异大）---
-batch_size = 4                 # 服务器显存大，可开大 batch
-crop_point_max = 500000         # 500000 点 ≈ 10m 柱半径
-num_worker = 64
-data_root = "/data/dataset/forest"  # 改成服务器实际路径
+# --- 资源相关 ---
+batch_size = 8                 # 32GB 显存，可以开大 batch
+crop_point_max = 500000        # 500000 点 ≈ 10m 柱半径
+num_worker = 32                # 128核 CPU，32 足够
+data_root = "data/forest"
 save_path = "exp/forest/semseg-litept-small-v1m1"
 
 # 推理参数

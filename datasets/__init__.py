@@ -15,3 +15,6 @@ from .forest import ForestDataset
 
 # dataloader
 from .dataloader import MultiDatasetDataloader
+
+# GPU-accelerated transforms (register with TRANSFORMS registry)
+import datasets.transform_gpu  # noqa: F401

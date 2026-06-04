@@ -1,16 +1,26 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # ===================== 常改配置 =====================
+# --- 预处理加速 ---
+# True: GPU 加速 (155x), 需手动将 num_worker 降到 1~2，否则多 worker 占显存 OOM
+# False: CPU 原有预处理
+use_gpu_transform = True
+
 # --- 裁切方式 ---
-# CylinderCrop: Z轴不切，适合森林竖直结构
-crop_type = "CylinderCrop"  # "CylinderCrop" or "SphereCrop"
-crop_point_max = 500000     # 采样点数上限, CylinderCrop: 500000, SphereCrop: 102400
+# "cylinder": Z轴不切，适合森林竖直结构; "sphere": 球形采样
+crop_mode = "cylinder"
+crop_type = (crop_mode.capitalize() + "CropCUDA") if use_gpu_transform else (crop_mode.capitalize() + "Crop")
+crop_point_max = 500000     # CylinderCrop: 500000, SphereCrop: 102400
 
 # --- 体素大小 ---
 grid_size = 0.02            # 训练体素大小 (m)
 
 # --- 类别映射 ---
 class_mapping = {7: -1}     # 忽略 class 7 噪声点
+
+# --- 数据增强开关 ---
+enable_scale = False         # 等比缩放，断树场景建议关闭，保留相对尺度参照
+scale_range = [0.9, 1.1]    # enable_scale=True 时生效
 
 # --- 预训练权重（在 local/server 配置中指定路径）---
 # weight = None
@@ -104,30 +114,33 @@ data = dict(
         data_root=data_root,
         class_mapping=class_mapping,
         transform=[
-            dict(type="CenterShift", apply_z=True),
+            dict(type="CenterShiftCUDA" if use_gpu_transform else "CenterShift", apply_z=True),
             dict(
-                type="RandomDropout", dropout_ratio=0.2, dropout_application_ratio=0.2
+                type="RandomDropoutCUDA" if use_gpu_transform else "RandomDropout",
+                dropout_ratio=0.2, dropout_application_ratio=0.2,
             ),
-            dict(type="RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
-            dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="x", p=0.5),
-            dict(type="RandomRotate", angle=[-1 / 64, 1 / 64], axis="y", p=0.5),
-            dict(type="RandomScale", scale=[0.9, 1.1]),
-            dict(type="RandomFlip", p=0.5),
-            dict(type="RandomJitter", sigma=0.005, clip=0.02),
+            dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
+            dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-1 / 64, 1 / 64], axis="x", p=0.5),
+            dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-1 / 64, 1 / 64], axis="y", p=0.5),
+        ]
+        + ([dict(type="RandomScaleCUDA" if use_gpu_transform else "RandomScale", scale=scale_range)] if enable_scale else [])
+        + [
+            dict(type="RandomFlipCUDA" if use_gpu_transform else "RandomFlip", p=0.5),
+            dict(type="RandomJitterCUDA" if use_gpu_transform else "RandomJitter", sigma=0.005, clip=0.02),
             dict(
-                type="GridSample",
+                type="GridSampleCUDA" if use_gpu_transform else "GridSample",
                 grid_size=grid_size,
                 hash_type="fnv",
                 mode="train",
                 return_grid_coord=True,
             ),
-            dict(type="ElasticDistortion", distortion_params=[[0.2, 0.4], [0.8, 1.6]]),
+            dict(type="ElasticDistortionCUDA" if use_gpu_transform else "ElasticDistortion", distortion_params=[[0.2, 0.4], [0.8, 1.6]]),
             dict(type=crop_type, point_max=crop_point_max, mode="random"),
-            dict(type="CenterShift", apply_z=False),
-            dict(type="ToTensor"),
-            dict(type="Update", keys_dict={"grid_size": grid_size}),
+            dict(type="CenterShiftCUDA" if use_gpu_transform else "CenterShift", apply_z=False),
+            dict(type="ToTensorCUDA" if use_gpu_transform else "ToTensor"),
+            dict(type="UpdateCUDA" if use_gpu_transform else "Update", keys_dict={"grid_size": grid_size}),
             dict(
-                type="Collect",
+                type="CollectCUDA" if use_gpu_transform else "Collect",
                 keys=("coord", "grid_coord", "segment", "grid_size"),
                 feat_keys=("coord",),
             ),
@@ -139,20 +152,20 @@ data = dict(
         split="val",
         data_root=data_root,
         transform=[
-            dict(type="CenterShift", apply_z=True),
-            dict(type="Copy", keys_dict={"segment": "origin_segment"}),
+            dict(type="CenterShiftCUDA" if use_gpu_transform else "CenterShift", apply_z=True),
+            dict(type="CopyCUDA" if use_gpu_transform else "Copy", keys_dict={"segment": "origin_segment"}),
             dict(
-                type="GridSample",
+                type="GridSampleCUDA" if use_gpu_transform else "GridSample",
                 grid_size=grid_size,
                 hash_type="fnv",
                 mode="train",
                 return_grid_coord=True,
                 return_inverse=True,
             ),
-            dict(type="CenterShift", apply_z=False),
-            dict(type="ToTensor"),
+            dict(type="CenterShiftCUDA" if use_gpu_transform else "CenterShift", apply_z=False),
+            dict(type="ToTensorCUDA" if use_gpu_transform else "ToTensor"),
             dict(
-                type="Collect",
+                type="CollectCUDA" if use_gpu_transform else "Collect",
                 keys=("coord", "grid_coord", "segment", "origin_segment", "inverse"),
                 feat_keys=("coord",),
             ),
@@ -164,12 +177,12 @@ data = dict(
         split="val",
         data_root=data_root,
         transform=[
-            dict(type="CenterShift", apply_z=True),
+            dict(type="CenterShiftCUDA" if use_gpu_transform else "CenterShift", apply_z=True),
         ],
         test_mode=True,
         test_cfg=dict(
             voxelize=dict(
-                type="GridSample",
+                type="GridSampleCUDA" if use_gpu_transform else "GridSample",
                 grid_size=0.2,
                 hash_type="fnv",
                 mode="train",
@@ -177,10 +190,10 @@ data = dict(
             ),
             crop=None,
             post_transform=[
-                dict(type="CenterShift", apply_z=False),
-                dict(type="ToTensor"),
+                dict(type="CenterShiftCUDA" if use_gpu_transform else "CenterShift", apply_z=False),
+                dict(type="ToTensorCUDA" if use_gpu_transform else "ToTensor"),
                 dict(
-                    type="Collect",
+                    type="CollectCUDA" if use_gpu_transform else "Collect",
                     keys=("coord", "grid_coord", "index"),
                     feat_keys=("coord",),
                 ),
@@ -188,7 +201,7 @@ data = dict(
             aug_transform=[
                 [
                     dict(
-                        type="RandomRotateTargetAngle",
+                        type="RandomRotateTargetAngleCUDA" if use_gpu_transform else "RandomRotateTargetAngle",
                         angle=[0],
                         axis="z",
                         center=[0, 0, 0],

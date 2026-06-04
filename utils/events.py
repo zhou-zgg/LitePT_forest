@@ -540,15 +540,12 @@ class HistoryBuffer:
         self._global_avg: float = 0
 
     def update(self, value: float, iteration: Optional[float] = None) -> None:
-        """
-        Add a new scalar value produced at certain iteration. If the length
-        of the buffer exceeds self._max_length, the oldest element will be
-        removed from the buffer.
-        """
         if iteration is None:
             iteration = self._count
         if len(self._data) == self._max_length:
             self._data.pop(0)
+        if value != value:
+            return
         self._data.append((value, iteration))
 
         self._count += 1

@@ -282,17 +282,20 @@ class Trainer(TrainerBase):
             else None
         )
 
+        use_gpu_transform = getattr(self.cfg, 'use_gpu_transform', False)
+        nworker = self.cfg.num_worker_per_gpu
         train_loader = torch.utils.data.DataLoader(
             train_data,
             batch_size=self.cfg.batch_size_per_gpu,
             shuffle=(train_sampler is None),
-            num_workers=self.cfg.num_worker_per_gpu,
+            num_workers=nworker,
             sampler=train_sampler,
             collate_fn=partial(point_collate_fn, mix_prob=self.cfg.mix_prob),
-            pin_memory=True,
+            pin_memory=False if use_gpu_transform else True,
             worker_init_fn=init_fn,
             drop_last=len(train_data) > self.cfg.batch_size,
-            persistent_workers=self.cfg.num_worker_per_gpu > 0,
+            persistent_workers=nworker > 0,
+            multiprocessing_context="spawn" if use_gpu_transform and nworker > 0 else None,
         )
         return train_loader
 
@@ -304,14 +307,18 @@ class Trainer(TrainerBase):
                 val_sampler = torch.utils.data.distributed.DistributedSampler(val_data)
             else:
                 val_sampler = None
+            use_gpu_transform = getattr(self.cfg, 'use_gpu_transform', False)
+            nworker = self.cfg.num_worker_per_gpu
+            val_opts = dict(multiprocessing_context="spawn") if use_gpu_transform and nworker > 0 else {}
             val_loader = torch.utils.data.DataLoader(
                 val_data,
                 batch_size=self.cfg.batch_size_val_per_gpu,
                 shuffle=False,
-                num_workers=self.cfg.num_worker_per_gpu,
-                pin_memory=True,
+                num_workers=nworker,
+                pin_memory=False if use_gpu_transform else True,
                 sampler=val_sampler,
                 collate_fn=collate_fn,
+                **val_opts,
             )
         return val_loader
 

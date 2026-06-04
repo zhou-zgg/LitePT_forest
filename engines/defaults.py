@@ -99,6 +99,25 @@ def default_argument_parser(epilog=None):
     return parser
 
 
+def _fix_transform_cuda_suffix(cfg_node, use_gpu):
+    if not use_gpu and isinstance(cfg_node, dict):
+        for key in ('post_transform', 'aug_transform'):
+            if key not in cfg_node:
+                continue
+            if key == 'post_transform':
+                for t in cfg_node[key]:
+                    if hasattr(t, 'type') and t.type.endswith('CUDA'):
+                        t['type'] = t.type[:-4]
+            elif key == 'aug_transform':
+                for aug_list in cfg_node[key]:
+                    for t in aug_list:
+                        if hasattr(t, 'type') and t.type.endswith('CUDA'):
+                            t['type'] = t.type[:-4]
+        if 'voxelize' in cfg_node and hasattr(cfg_node.voxelize, 'type'):
+            if cfg_node.voxelize.type.endswith('CUDA'):
+                cfg_node.voxelize['type'] = cfg_node.voxelize.type[:-4]
+
+
 def default_config_parser(file_path, options):
     # config name protocol: dataset_name/model_name-exp_name
     if os.path.isfile(file_path):
@@ -110,29 +129,55 @@ def default_config_parser(file_path, options):
     if options is not None:
         cfg.merge_from_dict(options)
 
-    # Apply top-level crop_param overrides to transform dicts
+    # Apply top-level variable overrides to nested dicts
     # (mmcv Config inheritance doesn't update variable references in nested dicts)
-    crop_keys = []
-    if hasattr(cfg, 'crop_type'):
-        crop_keys.append('type')
-    if hasattr(cfg, 'crop_point_max'):
-        crop_keys.append('point_max')
-    if crop_keys:
-        for split in ('train', 'val', 'test'):
-            if hasattr(cfg.data, split) and hasattr(getattr(cfg.data, split), 'transform'):
-                for t in getattr(cfg.data, split).transform:
-                    if t.type in ('CylinderCrop', 'SphereCrop'):
-                        if 'type' in crop_keys:
-                            t['type'] = cfg.crop_type
-                        if 'point_max' in crop_keys:
-                            t['point_max'] = cfg.crop_point_max
 
-    # Apply top-level data_root overrides to data splits
-    # (mmcv Config inheritance doesn't update variable references in nested dicts)
-    if hasattr(cfg, 'data_root'):
+    # If use_gpu_transform is False, strip "CUDA" suffix from all transform types
+    use_gpu_transform = getattr(cfg, 'use_gpu_transform', True)
+    if not use_gpu_transform:
         for split in ('train', 'val', 'test'):
-            if hasattr(cfg.data, split) and hasattr(getattr(cfg.data, split), 'data_root'):
-                getattr(cfg.data, split)['data_root'] = cfg.data_root
+            if not hasattr(cfg.data, split):
+                continue
+            ds = getattr(cfg.data, split)
+            if hasattr(ds, 'transform'):
+                for t in ds.transform:
+                    if hasattr(t, 'type') and t.type.endswith('CUDA'):
+                        t['type'] = t.type[:-4]
+            if hasattr(ds, 'test_cfg'):
+                _fix_transform_cuda_suffix(ds.test_cfg, use_gpu_transform)
+
+    for split in ('train', 'val', 'test'):
+        if not hasattr(cfg.data, split):
+            continue
+        ds = getattr(cfg.data, split)
+
+        # data_root, dataset_type, class_mapping
+        if hasattr(cfg, 'data_root') and hasattr(ds, 'data_root'):
+            ds['data_root'] = cfg.data_root
+        if hasattr(cfg, 'dataset_type') and hasattr(ds, 'type'):
+            ds['type'] = cfg.dataset_type
+        if split == 'train' and hasattr(cfg, 'class_mapping') and hasattr(ds, 'class_mapping'):
+            ds['class_mapping'] = cfg.class_mapping
+
+        # crop_type, crop_point_max, grid_size in transform list
+        if hasattr(ds, 'transform'):
+            for t in ds.transform:
+                # Handle both crop types (CPU and CUDA variants)
+                if hasattr(t, 'type') and t.type.rstrip('CUDA') in ('CylinderCrop', 'SphereCrop', 'CylinderCropCUDA', 'SphereCropCUDA'):
+                    if hasattr(cfg, 'crop_type'):
+                        crop_type = cfg.crop_type
+                        if not use_gpu_transform and crop_type.endswith('CUDA'):
+                            crop_type = crop_type[:-4]
+                        t['type'] = crop_type
+                    if hasattr(cfg, 'crop_point_max'):
+                        t['point_max'] = cfg.crop_point_max
+                # grid_size in GridSample and Update transforms (CPU and CUDA variants)
+                if hasattr(cfg, 'grid_size'):
+                    if hasattr(t, 'type') and t.type in ('GridSample', 'GridSampleCUDA') and 'grid_size' in t:
+                        t['grid_size'] = cfg.grid_size
+                    if hasattr(t, 'type') and t.type in ('Update', 'UpdateCUDA') and 'keys_dict' in t:
+                        if 'grid_size' in t.keys_dict:
+                            t.keys_dict['grid_size'] = cfg.grid_size
 
     if cfg.seed is None:
         cfg.seed = get_random_seed()

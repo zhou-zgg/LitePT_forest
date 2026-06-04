@@ -5,12 +5,12 @@ _base_ = ["semseg-litept-small-v1m1.py"]
 # --- 路径 ---
 data_root = "data/forest"
 save_path = "exp/forest/semseg-litept-small-v1m1"
-weight = None  # 例: "exp/forest/semseg-litept-small-v1m1/model/model_best.pth"
+weight = None
 
 # --- 资源相关 ---
-batch_size = 2                 # 16GB 显存，CylinderCrop 只能开 2
-crop_point_max = 200000         # 200000 点 ≈ 6m 柱半径，16GB 极限
-num_worker = 20
+batch_size = 1                 # 16GB 显存限制
+crop_point_max = 150000        # 150000 点，16GB 极限
+num_worker = 1                 # GPU 模式需降到 1，多 worker 占显存 OOM
 
 # 推理参数
 data = dict(

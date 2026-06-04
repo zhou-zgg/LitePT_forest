@@ -29,7 +29,12 @@ class CrossEntropyLoss(nn.Module):
         )
 
     def forward(self, pred, target):
-        return self.loss(pred, target) * self.loss_weight
+        if pred.shape[0] == 0:
+            return pred.sum() * 0.0
+        loss = self.loss(pred, target)
+        if torch.isnan(loss):
+            return pred.sum() * 0.0
+        return loss * self.loss_weight
 
 
 @LOSSES.register_module()

@@ -10,7 +10,7 @@ weight = "exp/pretrain/model_best.pth"
 # --- 资源相关 ---
 batch_size = 8                 # 32GB 显存，可以开大 batch
 crop_point_max = 600000        # 600000 点 ≈ 11m 柱半径
-num_worker = 128
+num_worker = 2                 # GPU 模式需降到 1~2，多 worker 占显存 OOM
 
 # 推理参数
 data = dict(

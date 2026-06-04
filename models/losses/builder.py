@@ -1,3 +1,4 @@
+import torch
 from utils.registry import Registry
 
 LOSSES = Registry("losses")
@@ -12,11 +13,11 @@ class Criteria(object):
 
     def __call__(self, pred, target):
         if len(self.criteria) == 0:
-            # loss computation occur in model
             return pred
         loss = 0
         for c in self.criteria:
-            loss += c(pred, target)
+            l = c(pred, target)
+            loss = loss + l.sum() if isinstance(l, torch.Tensor) and l.dim() > 0 else loss + l
         return loss
 
 

@@ -22,7 +22,7 @@ def collate_fn(batch):
         return list(batch)
     elif isinstance(batch[0], Sequence):
         for data in batch:
-            data.append(torch.tensor([data[0].shape[0]]))
+            data.append(torch.tensor([data[0].shape[0]], device=data[0].device))
         batch = [collate_fn(samples) for samples in zip(*batch)]
         batch[-1] = torch.cumsum(batch[-1], dim=0).int()
         return batch
@@ -33,7 +33,7 @@ def collate_fn(batch):
                 if "offset" not in key
                 # offset -> bincount -> concat bincount-> concat offset
                 else torch.cumsum(
-                    collate_fn([d[key].diff(prepend=torch.tensor([0])) for d in batch]),
+                    collate_fn([d[key].diff(prepend=torch.tensor([0], device=d[key].device)) for d in batch]),
                     dim=0,
                 )
             )
@@ -70,12 +70,15 @@ def point_collate_fn(batch, mix_prob=0):
         # recompute grid coord !!
         grid_coord_new = []
         batch_size = len(batch["offset"])
+        device = batch["coord"].device
+        if isinstance(batch.get("grid_size"), torch.Tensor):
+            batch["grid_size"] = batch["grid_size"].to(device)
 
         batch_mask = offset2batch(batch["offset"])
         for bs_id in range(batch_size):
             sample_mask = batch_mask == bs_id
             coord_sample = batch['coord'][sample_mask]
-            scaled_coord_sample = coord_sample / batch['grid_size'][0]  # hack here! 
+            scaled_coord_sample = coord_sample / batch['grid_size'][0]
             grid_coord_sample = torch.floor(scaled_coord_sample).to(torch.int64)
             min_coord_sample= grid_coord_sample.min(0)[0]
             grid_coord_sample -= min_coord_sample

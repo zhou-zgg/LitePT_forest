@@ -177,3 +177,29 @@ PYTHONPATH=./ python tools/pred2las.py
 2. **non-tree 无标注**: IoU 为 0，保留为预留类
 3. **末梢细枝标为 foliage**: 不影响 Stage1，Stage2 只学习粗树枝 vs 树干
 4. **PreciseEvaluator 测试慢**: 每个 val 场景需跑 13 种数据增强，6 个场景约需 10+ 分钟
+
+### 实验 4: Loss-v2（CE+smooth+Lovasz+Dice, 30 epoch fine-tune）
+- **训练时间**: 2026-06-05 20:18 ~ 21:59
+- **基线 mIoU**: 0.5529 (实验 1, epoch 51)
+- **改动**:
+  - criteria: CE(label_smoothing=0.1) + Lovasz + Dice (原 CE + Lovasz)
+  - optimizer: lr 0.006 → 0.001, param_dicts lr 0.0006 → 0.0001
+  - crop_point_max: 150000 → 100000 (16GB OOM)
+  - 从 best 权重 fine-tune, resume=False
+- **Best mIoU: 0.6092** (epoch 28)
+- **Loss 趋势**: 1.49→1.34→1.33→1.30→1.29→1.28→1.28→1.29→1.28→1.27→1.28→1.26→1.27→1.24→1.24→1.24→1.24→1.24→1.23→1.25→1.23→1.23→1.24→1.23→1.24→1.24→1.23→1.23→1.23→1.22
+- **各类 IoU 对比**:
+
+| 类别 | Baseline (实验1) | Loss-v2 (ep28) | 变化 |
+|---|---|---|---|
+| terrain | 0.82 | 0.861 | +4% |
+| foliage | 0.88 | 0.906 | +3% |
+| CWD | 0.00 | 0.000 | — |
+| trunk | 0.75 | 0.716 | -3% |
+| branch | 0.55 | 0.578 | +3% |
+| snag | 0.71 | 0.467 | -24% |
+| non-tree | 0.00 | 0.737 | +74% |
+| **mIoU** | **0.5529** | **0.6092** | **+5.6%** |
+
+- **结论**: 整体有效。non-tree 从 0 突破到 0.737（Dice loss 帮助学到小类）。snag 退化严重（0.71→0.47），可能因为感受野不够，snag/trunk 局部几何相似无法区分。待 Phase 2 (grid_size 0.04) 验证感受野假设。
+- **权重**: `exp/forest/semseg-litept-small-v1m1-loss-v2/model/model_best.pth`

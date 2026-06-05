@@ -5,7 +5,8 @@ _base_ = ["semseg-litept-small-v1m1.py"]
 # --- 路径 ---
 data_root = "data/forest"
 save_path = "exp/forest/semseg-litept-small-v1m1"
-weight = None
+weight = "exp/forest/semseg-litept-small-v1m1/model/model_best.pth"
+resume = False
 
 # --- 资源相关 ---
 batch_size = 1                 # 16GB 显存限制

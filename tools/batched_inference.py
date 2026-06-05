@@ -57,13 +57,13 @@ def main():
     if input_file.endswith(".pcd"):
         import open3d as o3d
         pcd = o3d.io.read_point_cloud(input_file)
-        coord = np.asarray(pcd.points).astype(np.float32)
+        coord = np.asarray(pcd.points).astype(np.float64)
         segment = np.zeros(len(coord), dtype=np.int32)
     elif input_file.endswith(".las"):
         import laspy
         las = laspy.read(input_file)
-        coord = np.vstack([las.X, las.Y, las.Z]).T.astype(np.float32) * 0.001
-        segment = np.array(las.label, dtype=np.int32).reshape([-1])
+        coord = np.vstack([las.x, las.y, las.z]).T.astype(np.float64)
+        segment = np.array(las.label, dtype=np.int32).reshape([-1]) if hasattr(las, 'label') else np.zeros(len(coord), dtype=np.int32)
     else:
         raise ValueError(f"Unsupported file format: {input_file}")
 
@@ -94,7 +94,7 @@ def main():
     )
     idx_unique = idx_sort[idx_select]
 
-    vox_coord = coord[idx_unique]
+    vox_coord = coord[idx_unique].astype(np.float32)
     vox_grid_coord = grid_coord[idx_unique]
 
     logger.info(f"Voxelized: {len(vox_coord)} points at grid_size={grid_size}")
@@ -153,15 +153,30 @@ def main():
     full_probs /= full_counts[:, None]
     pred = full_probs.argmax(axis=-1).astype(np.int32)
 
+    # Map voxel predictions back to all original points
+    # Build reverse map: voxel hash_key index -> prediction
+    # Each original point gets the label of its voxel representative
+    voxel_pred = pred[idx_unique]
+    _, inv_map = np.unique(hash_key, return_inverse=True)
+    # inv_map[i] maps original point i to its unique voxel index
+    # But idx_unique is already sorted by hash_key via idx_sort/idx_select
+    # Use argsort on idx_unique to build a direct lookup
+    vox_hash = hash_key[idx_unique]
+    sorted_idx = np.argsort(vox_hash)
+    sorted_hash = vox_hash[sorted_idx]
+    sorted_pred = voxel_pred[sorted_idx]
+    all_sorted_idx = np.searchsorted(sorted_hash, hash_key)
+    pred_all = sorted_pred[all_sorted_idx]
+
     save_path = os.path.join(cfg.save_path, "result")
     os.makedirs(save_path, exist_ok=True)
     pred_path = os.path.join(save_path, f"{name}_pred.npy")
-    np.save(pred_path, pred)
-    logger.info(f"Saved prediction: {pred_path} ({len(pred)} points)")
+    np.save(pred_path, pred_all)
+    logger.info(f"Saved prediction: {pred_path} ({len(pred_all)} points)")
 
     for i in range(num_classes):
-        count = (pred == i).sum()
-        logger.info(f"  class {i}: {count}/{len(pred)} ({100*count/len(pred):.1f}%)")
+        count = (pred_all == i).sum()
+        logger.info(f"  class {i}: {count}/{len(pred_all)} ({100*count/len(pred_all):.1f}%)")
 
     class_colors = np.array([
         [128, 64, 0],     # 0 terrain - brown
@@ -172,7 +187,7 @@ def main():
         [255, 255, 0],    # 5 snag - yellow
         [128, 0, 128],    # 6 non-tree-cyl - purple
     ], dtype=np.uint8)
-    colors = class_colors[pred]
+    colors = class_colors[pred_all]
 
     if input_file.endswith(".pcd"):
         pcd_out = o3d.geometry.PointCloud()
@@ -182,27 +197,26 @@ def main():
         o3d.io.write_point_cloud(pcd_path, pcd_out)
         logger.info(f"Saved PCD: {pcd_path}")
 
+    # Save as LAS (for both .pcd and .las input)
+    import laspy as _laspy
     if input_file.endswith(".las"):
-        import laspy
-        las_out = laspy.read(input_file)
-        las_out.classification = pred
+        las_out = _laspy.read(input_file)
+        las_out.classification = pred_all.astype(np.uint8)
         las_path = os.path.join(save_path, f"{name}_pred.las")
         las_out.write(las_path)
         logger.info(f"Saved LAS: {las_path}")
-
-    # Also save as LAS for pcd input (since user asked for las output)
-    import laspy as _laspy
-    header = _laspy.LasHeader(point_format=3, version="1.2")
-    header.offsets = orig_coord.min(axis=0)
-    header.scales = [0.001, 0.001, 0.001]
-    las_out = _laspy.LasData(header)
-    las_out.x = orig_coord[:, 0]
-    las_out.y = orig_coord[:, 1]
-    las_out.z = orig_coord[:, 2]
-    las_out.classification = pred.astype(np.uint8)
-    las_path = os.path.join(save_path, f"{name}_pred.las")
-    las_out.write(las_path)
-    logger.info(f"Saved LAS: {las_path}")
+    else:
+        header = _laspy.LasHeader(point_format=3, version="1.2")
+        header.offsets = orig_coord.min(axis=0)
+        header.scales = [0.001, 0.001, 0.001]
+        las_out = _laspy.LasData(header)
+        las_out.x = orig_coord[:, 0]
+        las_out.y = orig_coord[:, 1]
+        las_out.z = orig_coord[:, 2]
+        las_out.classification = pred_all.astype(np.uint8)
+        las_path = os.path.join(save_path, f"{name}_pred.las")
+        las_out.write(las_path)
+        logger.info(f"Saved LAS: {las_path}")
 
     logger.info("Done.")
 

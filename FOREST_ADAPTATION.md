@@ -203,3 +203,11 @@ PYTHONPATH=./ python tools/pred2las.py
 
 - **结论**: 整体有效。non-tree 从 0 突破到 0.737（Dice loss 帮助学到小类）。snag 退化严重（0.71→0.47），可能因为感受野不够，snag/trunk 局部几何相似无法区分。待 Phase 2 (grid_size 0.04) 验证感受野假设。
 - **权重**: `exp/forest/semseg-litept-small-v1m1-loss-v2/model/model_best.pth`
+
+### 实验 5: grid_size 0.04（从 Phase 1 best fine-tune）
+- **训练时间**: 2026-06-05 22:14 ~ 23:14 (27/30 epoch)
+- **Phase 1 best mIoU**: 0.6092
+- **改动**: grid_size 0.02 → 0.04, 其余同 Phase 1
+- **Best mIoU: 0.5573** (epoch 27), 低于 Phase 1 的 0.6092
+- **Loss 趋势**: 1.41→1.28→1.26→1.24→1.22→1.23→1.22→1.22→1.20→1.19→1.18→1.17→1.18→1.16→1.16
+- **结论**: **grid_size 0.04 无效**。感受野扩大的收益不足以弥补精细度丢失。mIoU 从 0.6092 降到 0.5573，说明 0.02m 的精细体素对森林点云分割是必要的。grid_size=0.04 不再继续。

@@ -21,3 +21,17 @@ export PYTHONPATH=./
 cd libs/pointrope && python setup.py install && cd ../..
 cd libs/pointops && python setup.py install && cd ../..
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Issues tracked in GitHub (`zhou-zgg/LitePT_forest`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout. See `docs/agents/domain.md`.

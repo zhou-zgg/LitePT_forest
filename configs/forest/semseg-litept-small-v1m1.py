@@ -151,6 +151,7 @@ data = dict(
         type=dataset_type,
         split="val",
         data_root=data_root,
+        class_mapping=class_mapping,
         transform=[
             dict(type="CenterShiftCUDA" if use_gpu_transform else "CenterShift", apply_z=True),
             dict(type="CopyCUDA" if use_gpu_transform else "Copy", keys_dict={"segment": "origin_segment"}),
@@ -183,9 +184,9 @@ data = dict(
         test_cfg=dict(
             voxelize=dict(
                 type="GridSampleCUDA" if use_gpu_transform else "GridSample",
-                grid_size=0.2,
+                grid_size=grid_size,
                 hash_type="fnv",
-                mode="train",
+                mode="test",
                 return_grid_coord=True,
             ),
             crop=None,
@@ -220,5 +221,4 @@ hooks = [
     dict(type="InformationWriter"),
     dict(type="SemSegEvaluator"),
     dict(type="CheckpointSaver", save_freq=3),
-    dict(type="PreciseEvaluator", test_last=False),
 ]

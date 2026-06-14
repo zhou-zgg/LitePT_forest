@@ -8,6 +8,7 @@ import torch.utils.data
 from packaging import version
 from functools import partial
 from pathlib import Path
+from tqdm import tqdm
 
 if sys.version_info >= (3, 10):
     from collections.abc import Iterator
@@ -153,7 +154,13 @@ class Trainer(TrainerBase):
                 if comm.get_world_size() > 1:
                     self.train_loader.sampler.set_epoch(self.epoch)
                 self.model.train()
-                self.data_iterator = enumerate(self.train_loader)
+                pbar = tqdm(
+                    self.train_loader,
+                    desc=f"Train [{self.epoch + 1}/{self.max_epoch}]",
+                    leave=False,
+                )
+                self.comm_info["pbar"] = pbar
+                self.data_iterator = enumerate(pbar)
                 self.before_epoch()
                 # => run_epoch
                 for (

@@ -708,7 +708,7 @@ class LitePT(PointModule):
         enc_depths=(2, 2, 2, 6, 2),
         enc_channels=(36, 72, 144, 252, 504),
         enc_num_head=(2, 4, 8, 14, 28),
-        enc_patch_size=(1024, 1024, 1024, 1024, 1024),
+        enc_patch_size=(1024, 1024, 1024, 2048, 2048),
         enc_conv=(True, True, True, False, False),
         enc_attn=(False, False, False, True, True),
         enc_rope_freq=(100.0, 100.0, 100.0, 100.0, 100.0),

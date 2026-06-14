@@ -20,12 +20,12 @@ data_root = "/root/autodl-tmp/dataset/tree/forest"
 weight = "/root/autodl-tmp/exp/forest/pretrained/semseg-litept-small-v1m1-loss-v2-clean-best.pth"
 resume = False
 
-epoch = 60
+epoch = 80
 eval_epoch = 10
 
-batch_size = 1
+batch_size = 3
 num_worker = 1
-crop_point_max = 800000
+crop_point_max = 1000000
 empty_cache_per_epoch = True
 
 data = dict(

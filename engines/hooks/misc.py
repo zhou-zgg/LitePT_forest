@@ -85,8 +85,9 @@ class IterationTimer(HookBase):
 
 @HOOKS.register_module()
 class InformationWriter(HookBase):
-    def __init__(self):
+    def __init__(self, log_interval=10):
         self.curr_iter = 0
+        self.log_interval = log_interval
         self.model_output_keys = []
 
     def before_train(self):
@@ -127,7 +128,10 @@ class InformationWriter(HookBase):
             )
         lr = self.trainer.optimizer.state_dict()["param_groups"][0]["lr"]
         self.trainer.comm_info["iter_info"] += "Lr: {lr:.5f}".format(lr=lr)
-        self.trainer.logger.info(self.trainer.comm_info["iter_info"])
+        current_iter = self.trainer.comm_info["iter"] + 1
+        max_iter = len(self.trainer.train_loader)
+        if current_iter % self.log_interval == 0 or current_iter == max_iter:
+            self.trainer.logger.info(self.trainer.comm_info["iter_info"])
         self.trainer.comm_info["iter_info"] = ""  # reset iter info
         if self.trainer.writer is not None:
             self.trainer.writer.add_scalar("params/lr", lr, self.curr_iter)

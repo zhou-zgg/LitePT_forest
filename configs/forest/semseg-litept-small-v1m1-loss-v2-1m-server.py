@@ -16,8 +16,8 @@ _base_ = ["semseg-litept-small-v1m1-loss-v2.py"]
 
 save_path = "/root/autodl-tmp/exp/forest/semseg-litept-small-v1m1-loss-v2-1m"
 
-data_root = "/root/autodl-tmp/forest"
-weight = "/root/autodl-tmp/exp/forest/semseg-litept-small-v1m1-loss-v2-1m/model/model_last.pth"
+data_root = "/root/autodl-tmp/dataset/tree/forest"
+weight = "/root/autodl-tmp/exp/forest/pretrained/semseg-litept-small-v1m1-loss-v2-clean-best.pth"
 resume = False
 
 epoch = 60

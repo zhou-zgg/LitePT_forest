@@ -7,7 +7,7 @@ eval_epoch = 5
 
 model = dict(
     backbone=dict(
-        enc_patch_size=(1024, 1024, 1024, 2048, 2048),
+        enc_patch_size=(1024, 1024, 1024, 1024, 1024),
     ),
     criteria=[
         dict(type="CrossEntropyLoss", loss_weight=1.0, label_smoothing=0.1, ignore_index=-1),

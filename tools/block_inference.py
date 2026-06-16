@@ -166,7 +166,7 @@ class Inference:
             del pcd; gc.collect()
         elif input_path.endswith(".las"):
             las = laspy.read(input_path)
-            coords = np.vstack([las.x, las.y, las.z]).T.astype(np.float32)
+            coords = np.vstack([las.X, las.Y, las.Z]).T.astype(np.float32) * 0.001
             del las; gc.collect()
         print(f"  加载完成: {len(coords):,}点 ({time.time()-t0:.1f}s, "
               f"{len(coords)/1024/1024/time.time()-t0:.0f}M点/s)", flush=True)

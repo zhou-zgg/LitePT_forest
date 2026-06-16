@@ -120,8 +120,8 @@ data = dict(
                 dropout_ratio=0.2, dropout_application_ratio=0.2,
             ),
             dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
-            dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-0.12, 0.12], axis="x", p=0.5),
-            dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-0.12, 0.12], axis="y", p=0.5),
+            dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-0.21, 0.21], axis="x", p=0.5),
+            dict(type="RandomRotateCUDA" if use_gpu_transform else "RandomRotate", angle=[-0.21, 0.21], axis="y", p=0.5),
         ]
         + ([dict(type="RandomScaleCUDA" if use_gpu_transform else "RandomScale", scale=scale_range)] if enable_scale else [])
         + [

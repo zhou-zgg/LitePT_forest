@@ -85,24 +85,50 @@ class SemSegEvaluator(HookBase):
         intersection = self.trainer.storage.history("val_intersection").total
         union = self.trainer.storage.history("val_union").total
         target = self.trainer.storage.history("val_target").total
-        iou_class = intersection / (union + 1e-10)
-        acc_class = intersection / (target + 1e-10)
+        total_pts = sum(target)
+        tp = intersection.astype(np.float64)
+        gt_count = target.astype(np.float64)
+        fp = (union - target).astype(np.float64)
+        fn = (target - intersection).astype(np.float64)
+        tn = (total_pts - union).astype(np.float64)
+        pred_count = tp + fp
+
+        iou_class = tp / (tp + fp + fn + 1e-10)
+        acc_class = tp / (gt_count + 1e-10)
+        prec_class = tp / (pred_count + 1e-10)
+        recall_class = acc_class.copy()
+        f1_class = 2 * prec_class * recall_class / (prec_class + recall_class + 1e-10)
+        spec_class = tn / (tn + fp + 1e-10)
+
         m_iou = np.mean(iou_class)
         m_acc = np.mean(acc_class)
-        all_acc = sum(intersection) / (sum(target) + 1e-10)
+        all_acc = tp.sum() / (total_pts + 1e-10)
+        m_prec = np.mean(prec_class)
+        m_recall = np.mean(recall_class)
+        m_f1 = np.mean(f1_class)
+        m_spec = np.mean(spec_class)
+        fw_iou = np.sum(gt_count / (total_pts + 1e-10) * iou_class)
+
         self.trainer.logger.info(
             "Val result: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}.".format(
                 m_iou, m_acc, all_acc
             )
         )
-        for i in range(self.trainer.cfg.data.num_classes):
+        self.trainer.logger.info(
+            "Val enhanced: mPrec/mRecall/mF1/mSpec/FWIoU {:.4f}/{:.4f}/{:.4f}/{:.4f}/{:.4f}".format(
+                m_prec, m_recall, m_f1, m_spec, fw_iou
+            )
+        )
+        names = self.trainer.cfg.data.names
+        nc = self.trainer.cfg.data.num_classes
+        header = f"{'Class':>16s} {'IoU':>7s} {'Acc':>7s} {'Prec':>7s} {'Recall':>7s} {'F1':>7s} {'Spec':>7s} {'GT#':>10s} {'Pred#':>10s}"
+        self.trainer.logger.info(header)
+        for i in range(nc):
             self.trainer.logger.info(
-                "Class_{idx}-{name} Result: iou/accuracy {iou:.4f}/{accuracy:.4f}".format(
-                    idx=i,
-                    name=self.trainer.cfg.data.names[i],
-                    iou=iou_class[i],
-                    accuracy=acc_class[i],
-                )
+                f"{names[i]:>16s} {iou_class[i]:>7.4f} {acc_class[i]:>7.4f} "
+                f"{prec_class[i]:>7.4f} {recall_class[i]:>7.4f} "
+                f"{f1_class[i]:>7.4f} {spec_class[i]:>7.4f} "
+                f"{int(gt_count[i]):>10d} {int(pred_count[i]):>10d}"
             )
         current_epoch = self.trainer.epoch + 1
         if self.trainer.writer is not None:

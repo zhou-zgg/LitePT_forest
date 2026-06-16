@@ -362,7 +362,7 @@ class Inference:
                     del idx, p; gc.collect()
                     continue
                 global_pos = np.searchsorted(overlap_idx, idx[local_overlap])
-                overlap_vote[global_pos, p[idx[local_overlap]]] += 1
+                overlap_vote[global_pos, p[local_overlap]] += 1
                 del idx, p; gc.collect()
                 if (bi+1) % 25 == 0 or bi == bc - 1:
                     print(f"    投票进度: {bi+1}/{bc}", flush=True)

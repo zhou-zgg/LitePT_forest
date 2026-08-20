@@ -275,6 +275,13 @@ class Trainer(TrainerBase):
 
         if comm.get_world_size() > 1:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_data)
+        elif (hasattr(train_data, 'sample_weights')
+              and train_data.sample_weights is not None):
+            train_sampler = torch.utils.data.WeightedRandomSampler(
+                train_data.sample_weights,
+                len(train_data),
+                replacement=True,
+            )
         else:
             train_sampler = None
 

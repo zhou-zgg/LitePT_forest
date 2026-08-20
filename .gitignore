@@ -19,3 +19,12 @@ tea_debug.log
 CREATE
 RUN
 datasets/dataset/
+
+# 补充忽略（推理日志/编译产物/临时）
+*.log
+log
+lov
+*.so
+*.o
+.ipynb_checkpoints/
+*.pptx

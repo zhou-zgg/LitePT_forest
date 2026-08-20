@@ -381,19 +381,19 @@ class GridSampleCUDA:
         min_coord_float = (min_coord.float() * grid_size).cpu().numpy()
 
         key = self._hash_cuda(grid_coord)
+
         idx_sort = torch.argsort(key)
+
         key_sort = key[idx_sort]
         unique_key, inverse, count = torch.unique(
             key_sort, return_inverse=True, return_counts=True
         )
 
         if self.mode == "train":
-            idx_select = (
-                torch.cumsum(
-                    torch.cat([torch.tensor([0], device=device), count[:-1]]), dim=0
-                )
-                + torch.randint(0, count.max().item(), (count.shape[0],), device=device) % count
+            cumsum = torch.cumsum(
+                torch.cat([torch.tensor([0], device=device), count[:-1]]), dim=0
             )
+            idx_select = cumsum + torch.rand(count.shape[0], device=device).mul(count.float()).long()
             idx_unique = idx_sort[idx_select]
 
             if "sampled_index" in data_dict:

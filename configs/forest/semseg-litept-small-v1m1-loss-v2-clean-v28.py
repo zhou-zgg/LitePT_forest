@@ -36,9 +36,11 @@ batch_size = 1
 num_worker = 1
 # crop_point_max=1000000 与 grid_size=0.02 继承自 clean.py，此处不重复声明
 empty_cache_per_epoch = True
-# val 评估：体素数不超过 100 万的文件整图前向（与 V17-V27 服务器口径一致），
-# 超大文件自动走圆柱分块评估（与本地 local16g 同一套 evaluator 代码）防 OOM。
-val_crop_point_max = 1000000
+# val 评估：与本地 local16g 完全相同的口径（300k 圆柱分块，该路径已在
+# 16G 卡上完整验证：最大 1.6M 点文件切 18 块评估通过）。超过 30 万体素的
+# 文件全部走分块，单块上限 45 万点（hard_cap=1.5x），远低于训练 1M crop
+# 的显存包络，评估不可能 OOM。
+val_crop_point_max = 300000
 
 data = dict(
     # block_xy=40 / overlap=10 继承自 clean.py

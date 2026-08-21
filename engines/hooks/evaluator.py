@@ -35,21 +35,35 @@ class SemSegEvaluator(HookBase):
     def eval(self):
         self.trainer.logger.info(">>>>>>>>>>>>>>>> Start Evaluation >>>>>>>>>>>>>>>>")
         self.trainer.model.eval()
+        # 圆柱分块评估：点数超过 val_crop_point_max 的文件按点密度自适应半径
+        # 切成多个圆柱块全覆盖前向（与训练 CylinderCropCUDA 同分布），
+        # softmax 概率累加合并，避免大文件整图前向 OOM。
+        block_max_pts = getattr(self.trainer.cfg, "val_crop_point_max", None)
         for i, input_dict in enumerate(self.trainer.val_loader):
+            output_dict = output = None
             for key in input_dict.keys():
                 if isinstance(input_dict[key], torch.Tensor):
                     input_dict[key] = input_dict[key].cuda(non_blocking=True)
-            with torch.no_grad():
-                output_dict = self.trainer.model(input_dict)
-            output = output_dict["seg_logits"]
-            loss = output_dict["loss"]
-            pred = output.max(1)[1]
             segment = input_dict["segment"]
-
-            if "inverse" in input_dict.keys():
-                assert "origin_segment" in input_dict.keys()
-                pred = pred[input_dict["inverse"]]
-                segment = input_dict["origin_segment"]
+            need_block = (
+                block_max_pts is not None and segment.shape[0] > block_max_pts
+            )
+            if not need_block:
+                with torch.no_grad():
+                    output_dict = self.trainer.model(input_dict)
+                output = output_dict["seg_logits"]
+                loss = output_dict["loss"]
+                pred = output.max(1)[1]
+                if "inverse" in input_dict.keys():
+                    assert "origin_segment" in input_dict.keys()
+                    pred = pred[input_dict["inverse"]]
+                    segment = input_dict["origin_segment"]
+            else:
+                pred, loss = self._block_eval(input_dict, block_max_pts)
+                if "inverse" in input_dict.keys():
+                    assert "origin_segment" in input_dict.keys()
+                    pred = pred[input_dict["inverse"]]
+                    segment = input_dict["origin_segment"]
             intersection, union, target = intersection_and_union_gpu(
                 pred,
                 segment,
@@ -81,6 +95,9 @@ class SemSegEvaluator(HookBase):
                     iter=i + 1, max_iter=len(self.trainer.val_loader), loss=loss.item()
                 )
             )
+            # 释放本次前向的 GPU 显存，避免连续评估多个大文件时显存累积 OOM
+            del output_dict, output, pred, segment, loss
+            torch.cuda.empty_cache()
         loss_avg = self.trainer.storage.history("val_loss").avg
         intersection = self.trainer.storage.history("val_intersection").total
         union = self.trainer.storage.history("val_union").total
@@ -100,13 +117,17 @@ class SemSegEvaluator(HookBase):
         f1_class = 2 * prec_class * recall_class / (prec_class + recall_class + 1e-10)
         spec_class = tn / (tn + fp + 1e-10)
 
-        m_iou = np.mean(iou_class)
-        m_acc = np.mean(acc_class)
+        # 只对有 GT 点的类别求均值：被 ignore_classes 忽略的类（如 CWD，
+        # 标签已映射为 -1）GT 为 0，不参与 mIoU 等均值，避免空类拖低指标。
+        valid_cls = gt_count > 0
+
+        m_iou = np.mean(iou_class[valid_cls]) if valid_cls.any() else 0.0
+        m_acc = np.mean(acc_class[valid_cls]) if valid_cls.any() else 0.0
         all_acc = tp.sum() / (total_pts + 1e-10)
-        m_prec = np.mean(prec_class)
-        m_recall = np.mean(recall_class)
-        m_f1 = np.mean(f1_class)
-        m_spec = np.mean(spec_class)
+        m_prec = np.mean(prec_class[valid_cls]) if valid_cls.any() else 0.0
+        m_recall = np.mean(recall_class[valid_cls]) if valid_cls.any() else 0.0
+        m_f1 = np.mean(f1_class[valid_cls]) if valid_cls.any() else 0.0
+        m_spec = np.mean(spec_class[valid_cls]) if valid_cls.any() else 0.0
         fw_iou = np.sum(gt_count / (total_pts + 1e-10) * iou_class)
 
         self.trainer.logger.info(
@@ -168,6 +189,117 @@ class SemSegEvaluator(HookBase):
         self.trainer.logger.info("<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<")
         self.trainer.comm_info["current_metric_value"] = m_iou  # save for saver
         self.trainer.comm_info["current_metric_name"] = "mIoU"  # save for saver
+
+    def _block_eval(self, input_dict, max_pts):
+        """圆柱形空间分块全覆盖评估。
+
+        与训练的 CylinderCropCUDA 同分布：按点密度自适应圆柱半径，圆柱中心
+        以方形网格（步长 1.2r，保证相邻圆柱重叠、全覆盖）铺满 XY 范围，
+        逐块前向，softmax 概率按点累加，重叠区取概率平均后 argmax。
+        返回 (pred [N], loss tensor)。
+        """
+        import math
+
+        coord = input_dict["coord"]  # GridSample 后的降采样点
+        num_classes = self.trainer.cfg.data.num_classes
+        n = coord.shape[0]
+        xy = coord[:, :2]
+        x_min, y_min = float(xy[:, 0].min()), float(xy[:, 1].min())
+        x_max, y_max = float(xy[:, 0].max()), float(xy[:, 1].max())
+
+        # 自适应半径：目标点数 / 点密度 → 圆面积 → 半径
+        area = max((x_max - x_min) * (y_max - y_min), 1e-6)
+        density = n / area
+        r = math.sqrt(max_pts / (math.pi * density))
+        r = min(max(r, 5.0), 60.0)
+        step = 1.2 * r
+
+        centers = []
+        cx = x_min - r
+        while cx <= x_max + r:
+            cy = y_min - r
+            while cy <= y_max + r:
+                centers.append((cx, cy))
+                cy += step
+            cx += step
+
+        probs = torch.zeros(n, num_classes, device=coord.device)
+        counts = torch.zeros(n, device=coord.device)
+        loss_sum, loss_w = 0.0, 0
+        hard_cap = int(1.5 * max_pts)  # 过密圆柱截断，截掉点由相邻重叠圆柱覆盖
+        n_blocks = 0
+        for cx, cy in centers:
+            d2 = (xy[:, 0] - cx) ** 2 + (xy[:, 1] - cy) ** 2
+            idx = torch.nonzero(d2 <= r * r, as_tuple=False).squeeze(1)
+            if idx.numel() == 0:
+                continue
+            if idx.numel() > hard_cap:
+                perm = torch.randperm(idx.numel(), device=idx.device)[:hard_cap]
+                idx = idx[perm]
+            block = {}
+            for k in ("coord", "grid_coord", "segment", "feat"):
+                if k in input_dict:
+                    block[k] = input_dict[k][idx]
+            # 单块即单 batch：显式给 batch 索引，Point 会自动生成对应 offset
+            block["batch"] = torch.zeros(
+                idx.numel(), dtype=torch.long, device=idx.device
+            )
+            # offset 是 [batch_size] 形状，不能按点索引，直接丢弃由 Point 重建
+            block.pop("offset", None)
+            # 圆柱平移到原点（grid_coord 取整数格偏移，保持网格对齐），
+            # 贴近训练时 CenterShift 后的坐标分布
+            if "grid_coord" in block:
+                block["grid_coord"] = block["grid_coord"] - block[
+                    "grid_coord"
+                ].min(0).values
+            with torch.no_grad():
+                out = self.trainer.model(block)
+            probs[idx] += torch.softmax(out["seg_logits"], dim=-1)
+            counts[idx] += 1
+            loss_sum += float(out["loss"].item()) * idx.numel()
+            loss_w += idx.numel()
+            n_blocks += 1
+            del block, out
+            torch.cuda.empty_cache()
+
+        uncovered = int((counts == 0).sum().item())
+        if uncovered > 0:
+            self.trainer.logger.warning(
+                "Block eval: {} points not covered, fallback to mini-batch forward".format(
+                    uncovered
+                )
+            )
+            # 兜底：密集区被截断漏掉的点，分小批直接前向
+            rest_idx = torch.nonzero(counts == 0, as_tuple=False).squeeze(1)
+            batch = 50000
+            for s in range(0, rest_idx.numel(), batch):
+                idx = rest_idx[s : s + batch]
+                block = {}
+                for k in ("coord", "grid_coord", "segment", "feat"):
+                    if k in input_dict:
+                        block[k] = input_dict[k][idx]
+                block["batch"] = torch.zeros(
+                    idx.numel(), dtype=torch.long, device=idx.device
+                )
+                if "grid_coord" in block:
+                    block["grid_coord"] = block["grid_coord"] - block[
+                        "grid_coord"
+                    ].min(0).values
+                with torch.no_grad():
+                    out = self.trainer.model(block)
+                probs[idx] += torch.softmax(out["seg_logits"], dim=-1)
+                counts[idx] += 1
+                loss_sum += float(out["loss"].item()) * idx.numel()
+                loss_w += idx.numel()
+                del block, out
+                torch.cuda.empty_cache()
+        pred = probs.argmax(1)
+        pred[counts == 0] = 0
+        loss = torch.tensor(loss_sum / max(loss_w, 1), device=coord.device)
+        self.trainer.logger.info(
+            "Block eval: {} pts, r={:.1f}m, {} blocks".format(n, r, n_blocks)
+        )
+        return pred, loss
 
     def after_train(self):
         self.trainer.logger.info(

@@ -17,10 +17,14 @@ class ForestDataset(DefaultDataset):
     ]
 
     def __init__(self, class_mapping=None, pred_check_dir=None,
-                 oversample=False, oversample_exclude_classes=None, **kwargs):
+                 oversample=False, oversample_exclude_classes=None,
+                 ignore_classes=None, **kwargs):
         super().__init__(**kwargs)
         self.class_mapping = class_mapping
         self.pred_check_dir = pred_check_dir
+        # 不参与学习的类别（如 CWD）：标签映射为 ignore_index(-1)，
+        # 损失与指标均跳过，但模型输出仍保留该类别通道（推理兼容）。
+        self.ignore_classes = list(ignore_classes) if ignore_classes else None
 
         if oversample and not self.test_mode:
             self.sample_weights = self._compute_sample_weights(
@@ -167,7 +171,14 @@ class ForestDataset(DefaultDataset):
             }
         else:
             las = laspy.read(data_path)
-            coord = np.vstack([las.X, las.Y, las.Z]).T.astype(np.float32) * 0.001
+            # 语义：LAS 真实坐标 = 整数 * scale + offset。这里取整数 * scale，
+            # 即以该文件 LAS 原点为基准的相对坐标（真实坐标减去 offset 后的结果），
+            # 从而把经纬度等绝对基准抵消掉，模型拿到的是规整的局部坐标。
+            # 使用 las.header.scales 而非写死的 0.001，兼容不同 scale 的 las 文件。
+            scale = np.asarray(las.header.scales, dtype=np.float32)
+            coord = (
+                np.vstack([las.X, las.Y, las.Z]).T.astype(np.float32) * scale
+            )
             if "label" in [d for d in las.point_format.dimension_names]:
                 segment = np.array(las.label, dtype=np.int32).reshape([-1])
             else:
@@ -176,6 +187,9 @@ class ForestDataset(DefaultDataset):
             if self.class_mapping is not None:
                 mapping = lambda x: self.class_mapping.get(x, x)
                 segment = np.vectorize(mapping, otypes=[np.int32])(segment)
+
+            if self.ignore_classes:
+                segment[np.isin(segment, self.ignore_classes)] = -1
 
             data_dict = {
                 "coord": coord,

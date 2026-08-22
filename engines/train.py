@@ -224,6 +224,10 @@ class Trainer(TrainerBase):
         self.comm_info["model_output_dict"] = output_dict
 
     def after_epoch(self):
+        # 评估前先释放主进程训练缓存：eval 的 DataLoader worker（GPU transform）
+        # 需要另行申请显存，若主进程仍持有峰值缓存会导致 worker OOM（V28 实测）
+        if self.cfg.empty_cache_per_epoch:
+            torch.cuda.empty_cache()
         for h in self.hooks:
             h.after_epoch()
         self.storage.reset_histories()

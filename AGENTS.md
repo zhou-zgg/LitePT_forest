@@ -71,6 +71,7 @@ PYTHONPATH=. python3 tools/batch_infer_v24.py
 | V24 | Base, resume V23 best + OneCycleLR | **0.6635** | Previous best (superseded by V27); trunk=0.866, snag=0.768 |
 | V25/V26 | Base, weighted CE | 0.6320 | Failed; weighted loss hurt snag (-0.21) |
 | V27 | Base, resume V24 best + continue | **0.6850** | New best base; same config as V24 (train grid 0.02 / infer grid 0.025, CE+Lovasz+Dice, OneCycleLR) |
+| L1-local | Small, **crop 350k + slope aug ±0.12** | **0.7582** | Local 16G best; resume best + slope aug, 60ep, best@ep30; new forest_new dataset (CWD ignored). trunk=0.797, snag=0.711, NTC=0.877 |
 
 ## Key Code
 

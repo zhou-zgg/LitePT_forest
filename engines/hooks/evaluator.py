@@ -33,7 +33,10 @@ class SemSegEvaluator(HookBase):
             self.eval()
 
     def eval(self):
-        self.trainer.logger.info(">>>>>>>>>>>>>>>> Start Evaluation >>>>>>>>>>>>>>>>")
+        self.trainer.logger.info(">>>>>>>>>>>>>>>> Start Evaluation >>>>>>>>>>>>>>")
+        # 每轮评估开始前清空分组累计，避免跨 epoch 的文件（block）重复累加，
+        # 导致 GT#/allAcc 被放大、比率类指标混入历史轮次（allAcc 因此曾超 1）。
+        self._group_acc = dict()
         self.trainer.model.eval()
         # 圆柱分块评估：点数超过 val_crop_point_max 的文件按点密度自适应半径
         # 切成多个圆柱块全覆盖前向（与训练 CylinderCropCUDA 同分布），
@@ -79,6 +82,9 @@ class SemSegEvaluator(HookBase):
                 union.cpu().numpy(),
                 target.cpu().numpy(),
             )
+            # Per-file name for group-wise stats (e.g. separate mountain vs rest).
+            file_name = str(input_dict.get("name", "unknown"))
+            self._acc_group(file_name, intersection, union, target)
             # Here there is no need to sync since sync happened in dist.all_reduce
             self.trainer.storage.put_scalar("val_intersection", intersection)
             self.trainer.storage.put_scalar("val_union", union)
@@ -187,8 +193,75 @@ class SemSegEvaluator(HookBase):
                             step=wandb.run.step,
                         )
         self.trainer.logger.info("<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<")
+        self._print_group_stats(union, target, total_pts)
         self.trainer.comm_info["current_metric_value"] = m_iou  # save for saver
         self.trainer.comm_info["current_metric_name"] = "mIoU"  # save for saver
+
+    def _acc_group(self, name, intersection, union, target):
+        """按文件归组累计 confusion matrix（用于分组单独统计，如 mountain）。"""
+        if not hasattr(self, "_group_acc"):
+            self._group_acc = dict()
+        low = name.lower()
+        group = "mountain" if ("moutain" in low or "mountain" in low) else "other"
+        d = self._group_acc.setdefault(
+            group,
+            dict(
+                intersection=np.zeros_like(intersection),
+                union=np.zeros_like(union),
+                target=np.zeros_like(target),
+                files=[],
+            ),
+        )
+        d["intersection"] += intersection
+        d["union"] += union
+        d["target"] += target
+        d["files"].append(name)
+
+    def _per_class_metrics(self, intersection, union, target, total_pts):
+        tp = intersection.astype(np.float64)
+        gt_count = target.astype(np.float64)
+        fp = (union - target).astype(np.float64)
+        fn = (target - intersection).astype(np.float64)
+        tn = (total_pts - union).astype(np.float64)
+        pred_count = tp + fp
+        iou = tp / (tp + fp + fn + 1e-10)
+        acc = tp / (gt_count + 1e-10)
+        prec = tp / (pred_count + 1e-10)
+        recall = acc.copy()
+        f1 = 2 * prec * recall / (prec + recall + 1e-10)
+        spec = tn / (tn + fp + 1e-10)
+        return iou, acc, prec, recall, f1, spec, gt_count, pred_count
+
+    def _print_group_stats(self, union_all, target_all, total_pts):
+        """按用户要求：把 mountain 数据单列的评估细节单独打印出来。"""
+        if not hasattr(self, "_group_acc"):
+            return
+        names = self.trainer.cfg.data.names
+        nc = self.trainer.cfg.data.num_classes
+        header = f"{'Class':>16s} {'IoU':>7s} {'Acc':>7s} {'Prec':>7s} {'Recall':>7s} {'F1':>7s} {'Spec':>7s} {'GT#':>10s} {'Pred#':>10s}"
+        for group, d in self._group_acc.items():
+            inter, uni, tgt = d["intersection"], d["union"], d["target"]
+            g_total = int(tgt.sum())
+            iou, acc, prec, recall, f1, spec, gt, pred = self._per_class_metrics(
+                inter, uni, tgt, g_total
+            )
+            valid = gt > 0
+            m_iou = iou[valid].mean() if valid.any() else 0.0
+            m_acc = acc[valid].mean() if valid.any() else 0.0
+            files = ",".join(d["files"])
+            self.trainer.logger.info(
+                f"[Group={group}] files({len(d['files'])}): {files}"
+            )
+            self.trainer.logger.info(
+                f"[Group={group}] mIoU/mAcc/allAcc {m_iou:.4f}/{m_acc:.4f}/{g_total/(total_pts+1e-10):.4f}"
+            )
+            self.trainer.logger.info(f"[Group={group}] {header}")
+            for i in range(nc):
+                self.trainer.logger.info(
+                    f"[{group}] {names[i]:>12s} {iou[i]:>7.4f} {acc[i]:>7.4f} "
+                    f"{prec[i]:>7.4f} {recall[i]:>7.4f} {f1[i]:>7.4f} {spec[i]:>7.4f} "
+                    f"{int(gt[i]):>10d} {int(pred[i]):>10d}"
+                )
 
     def _block_eval(self, input_dict, max_pts):
         """圆柱形空间分块全覆盖评估。

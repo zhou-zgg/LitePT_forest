@@ -22,8 +22,8 @@ data = dict(
             dict(type="RandomDropoutCUDA", dropout_ratio=0.2, dropout_application_ratio=0.2),
             dict(type="RandomRotateCUDA", angle=[-1, 1], axis="z", center=[0, 0, 0], p=0.5),
             # ===== 山地坡度增强 (toggle below: comment out when enough real mountain data) =====
-            # dict(type="RandomRotateCUDA", angle=[0, 0.12], axis="x", p=0.5),
-            # dict(type="RandomRotateCUDA", angle=[0, 0.12], axis="y", p=0.5),
+            dict(type="RandomRotateCUDA", angle=[0, 0.12], axis="x", p=0.5),
+            dict(type="RandomRotateCUDA", angle=[0, 0.12], axis="y", p=0.5),
             # ===== 山地坡度增强 end =====
             dict(type="RandomFlipCUDA", p=0.5),
             dict(type="RandomJitterCUDA", sigma=0.005, clip=0.02),

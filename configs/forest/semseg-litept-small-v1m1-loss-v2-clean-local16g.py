@@ -2,17 +2,19 @@ _base_ = ["semseg-litept-small-v1m1-loss-v2-clean.py"]
 
 # 本机 16G 专用冒烟配置：数据路径切到新数据集
 data_root = "data/forest_new"
-save_path = "exp/forest/semseg-litept-small-v1m1-clean-local16g"
-weight = None
+save_path = "exp/forest/semseg-litept-small-v1m1-clean-local16g-c350-slope"
+# 开启山地坡度增强（x/y 轴 ±0.12 rad），从之前 best(mIoU 0.6569) 初始化续训：
+# 保留已学好的平地能力，同时补足陡坡泛化（尤其山地 terrain）。resume=False 只载权重。
+weight = "exp/forest/semseg-litept-small-v1m1-clean-local16g-c350/model/model_best.pth"
 resume = False
 
-epoch = 100
+epoch = 60  # 100 过多（此前测试过），60 足够；OneCycleLR 按 60 epoch 排程
 eval_epoch = 5
 # val 整图评估已在 evaluator.py 加了 empty_cache 释放显存，可正常自动评估
 evaluate = True
 batch_size = 1
 num_worker = 0
-crop_point_max = 100000
+crop_point_max = 350000
 # val 评估用圆柱形空间分块（与训练 CylinderCropCUDA 同分布）：
 # 大文件不再整图前向，而是按点密度自适应半径切成多个圆柱块全覆盖，
 # softmax 概率累加合并后统一算指标。评估无梯度/优化器开销，
@@ -36,7 +38,7 @@ data = dict(
             dict(type="GridSampleCUDA", grid_size=0.02, hash_type="fnv", mode="train", return_grid_coord=True, return_inverse=True),
             dict(type="CenterShiftCUDA", apply_z=False),
             dict(type="ToTensorCUDA"),
-            dict(type="CollectCUDA", keys=("coord", "grid_coord", "segment", "origin_segment", "inverse"), feat_keys=("coord",)),
+            dict(type="CollectCUDA", keys=("coord", "grid_coord", "segment", "origin_segment", "inverse", "name"), feat_keys=("coord",)),
         ]
     ),
 )

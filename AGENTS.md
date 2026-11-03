@@ -94,3 +94,17 @@ PYTHONPATH=. python3 tools/batch_infer_v24.py
 - **NTC root cause fixed**: GridSample at 0.02m decimates pole points 99%; oversampling compensates
 - **Weighted CE rejected**: amplifies NTC at cost of snag/trunk; oversampling alone is sufficient
 - **CWD (class 2) is NOT a learning target** — user does not care about CWD accuracy. Labels are mapped to ignore_index(-1) in training and val (`ignore_classes=[2]` in config, handled by `ForestDataset`). The model still outputs 7 classes: the CWD slot MUST be kept for inference compatibility with downstream projects. Never remove the class from num_classes/names. mIoU is averaged over valid classes only (GT count > 0), see `SemSegEvaluator`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as local markdown files under `.scratch/<feature>/` (spec + one file per ticket). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), recorded as `Status:` lines in issue files. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.

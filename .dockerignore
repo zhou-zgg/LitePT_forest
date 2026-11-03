@@ -1,0 +1,15 @@
+# 构建上下文只要 requirements.txt 和 libs/ 两个扩展的源码
+# 排除数据/实验产物，避免 docker build 把几百 GB 数据发给 daemon
+.git
+data/
+exp/
+pretrained/
+log/
+nohup.out
+*.pth
+*.las
+*.pcd
+__pycache__/
+**/__pycache__/
+*.pyc
+.ipynb_checkpoints/

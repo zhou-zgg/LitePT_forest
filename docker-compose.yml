@@ -1,0 +1,32 @@
+services:
+  forest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GPU_ARCH_LIST: "8.6"
+    image: forest-net:latest
+    container_name: forest-net
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    # dataloader 多进程共享内存；宿主机内存紧张就调小
+    shm_size: "32gb"
+    environment:
+      - PYTHONPATH=/workspace
+      # torch>=2.6 将 torch.load 默认改为 weights_only=True，旧 checkpoint 会加载失败；此变量恢复旧行为
+      - TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+    ports:
+      # tensorboard: 容器内启动 tensorboard --logdir exp --host 0.0.0.0 --port 6006
+      - "6006:6006"
+    volumes:
+      # 代码/数据/checkpoint 全部留在宿主机：改代码不用重建镜像，重建容器不丢实验
+      - .:/workspace
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all          # 透传全部 4 卡；只用单卡改成 device_ids: ['0']
+              capabilities: [gpu]
